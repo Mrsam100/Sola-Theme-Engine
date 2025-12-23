@@ -11,7 +11,7 @@ interface HeroProps {
   onBegin: () => void;
 }
 
-const Hero: React.FC<HeroProps> = ({ onBegin }) => {
+const Hero: React.FC<HeroProps> = React.memo(({ onBegin }) => {
   return (
     <section className="relative min-h-screen flex items-center pt-32 pb-20 px-6 overflow-hidden">
       {/* Visual Depth Elements */}
@@ -74,6 +74,8 @@ const Hero: React.FC<HeroProps> = ({ onBegin }) => {
       </div>
     </section>
   );
-};
+});
+
+Hero.displayName = 'Hero';
 
 export default Hero;

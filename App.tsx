@@ -10,12 +10,15 @@ import Hero from './components/Hero';
 import Explainer from './components/Explainer';
 import Dashboard from './components/Dashboard';
 import Footer from './components/Footer';
+import PrivacyPolicy from './components/PrivacyPolicy';
+import TermsOfService from './components/TermsOfService';
+import SecurityPolicy from './components/SecurityPolicy';
 import { ViewState } from './types';
 
 const App: React.FC = () => {
   const [view, setView] = useState<ViewState>({ type: 'home' });
 
-  const handleNav = (type: 'home' | 'dashboard') => {
+  const handleNav = (type: ViewState['type']) => {
     setView({ type });
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -37,7 +40,25 @@ const App: React.FC = () => {
         </main>
       )}
 
-      <Footer />
+      {view.type === 'privacy' && (
+        <main className="animate-fade-in-up">
+          <PrivacyPolicy />
+        </main>
+      )}
+
+      {view.type === 'terms' && (
+        <main className="animate-fade-in-up">
+          <TermsOfService />
+        </main>
+      )}
+
+      {view.type === 'security' && (
+        <main className="animate-fade-in-up">
+          <SecurityPolicy />
+        </main>
+      )}
+
+      <Footer onNavClick={handleNav} />
     </div>
   );
 };

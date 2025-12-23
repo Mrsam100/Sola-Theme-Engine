@@ -1,37 +1,27 @@
-
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
-*/
+ */
 
 import React, { useState, useCallback, useEffect } from 'react';
 import { transformScreenshotToDark } from '../services/geminiService';
-import { ConversionState } from '../types';
-
-declare global {
-  // Use interface for AIStudio to allow merging and match the expected global type name
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-
-  interface Window {
-    // Add readonly modifier to match the global declaration provided by the environment
-    readonly aistudio: AIStudio;
-  }
-}
+import { ConversionState, ErrorCode } from '../types';
+import { validateImageFile } from '../utils/validation';
+import { getErrorMessage, isRecoverableError } from '../utils/errorMessages';
+import { announceToScreenReader, announceLoading, announceSuccess, announceError } from '../utils/a11y';
 
 const Dashboard: React.FC = () => {
   const [state, setState] = useState<ConversionState>({
     original: null,
     transformed: null,
     isProcessing: false,
-    error: null
+    error: null,
+    errorCode: undefined,
   });
 
-  const [hasKey, setHasKey] = useState<boolean | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
 
   const loadingMessages = [
     "Analyzing UI Hierarchy...",
@@ -41,14 +31,7 @@ const Dashboard: React.FC = () => {
     "Applying Rim Lighting..."
   ];
 
-  useEffect(() => {
-    const checkKey = async () => {
-      const selected = await window.aistudio.hasSelectedApiKey();
-      setHasKey(selected);
-    };
-    checkKey();
-  }, []);
-
+  // Cycle through loading messages while processing
   useEffect(() => {
     let interval: number;
     if (state.isProcessing) {
@@ -57,45 +40,178 @@ const Dashboard: React.FC = () => {
       }, 2500);
     }
     return () => clearInterval(interval);
-  }, [state.isProcessing]);
+  }, [state.isProcessing, loadingMessages.length]);
 
-  const handleKeySetup = async () => {
-    await window.aistudio.openSelectKey();
-    setHasKey(true); // Proceed assuming success as per rules
+  // Show success modal when transformation completes
+  useEffect(() => {
+    if (state.transformed && !state.isProcessing && !state.error) {
+      setShowSuccessModal(true);
+      // Auto-hide after 3 seconds
+      const timer = setTimeout(() => {
+        setShowSuccessModal(false);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [state.transformed, state.isProcessing, state.error]);
+
+  // Compress image to reduce memory usage and improve performance
+  const compressImage = async (file: File): Promise<{ base64: string; compressed: string }> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onerror = () => reject(new Error('Failed to read file'));
+
+      reader.onload = (e) => {
+        if (!e.target?.result) {
+          reject(new Error('Failed to read file data'));
+          return;
+        }
+
+        const img = new Image();
+
+        img.onerror = () => reject(new Error('Invalid image file'));
+
+        img.onload = () => {
+          try {
+            // Create canvas for compression
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+
+            if (!ctx) {
+              reject(new Error('Canvas not supported'));
+              return;
+            }
+
+            // Limit max dimensions to 2048px to prevent memory issues
+            const MAX_WIDTH = 2048;
+            const MAX_HEIGHT = 2048;
+            let width = img.width;
+            let height = img.height;
+
+            // Calculate new dimensions while maintaining aspect ratio
+            if (width > height) {
+              if (width > MAX_WIDTH) {
+                height = Math.floor((height * MAX_WIDTH) / width);
+                width = MAX_WIDTH;
+              }
+            } else {
+              if (height > MAX_HEIGHT) {
+                width = Math.floor((width * MAX_HEIGHT) / height);
+                height = MAX_HEIGHT;
+              }
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+
+            // Draw and compress image
+            ctx.drawImage(img, 0, 0, width, height);
+
+            // Convert to base64 with 85% quality for good balance
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            const cleanBase64 = compressedBase64.split(',')[1];
+
+            resolve({ base64: compressedBase64, compressed: cleanBase64 });
+          } catch (error) {
+            reject(new Error('Image compression failed'));
+          }
+        };
+
+        img.src = e.target.result as string;
+      };
+
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleFile = async (file: File) => {
-    if (!file.type.startsWith('image/')) return;
+    // Validate file before processing
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      const errorCode: ErrorCode = 'INVALID_INPUT';
+      const errorInfo = getErrorMessage(errorCode);
 
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const base64 = e.target?.result as string;
-      const cleanBase64 = base64.split(',')[1];
-      
-      setState(prev => ({ 
-        ...prev, 
-        original: base64, 
-        transformed: null, 
-        isProcessing: true,
-        error: null 
+      setState(prev => ({
+        ...prev,
+        error: errorInfo.message,
+        errorCode,
       }));
-      
-      try {
-        const result = await transformScreenshotToDark(cleanBase64, file.type);
-        setState(prev => ({ ...prev, transformed: result, isProcessing: false }));
-      } catch (err: any) {
-        if (err.message === "API_KEY_EXPIRED") {
-          setHasKey(false);
-          setState(prev => ({ ...prev, isProcessing: false, error: "Authentication expired. Please re-connect your API key." }));
-        } else {
-          setState(prev => ({ ...prev, isProcessing: false, error: "Sola transformation failed. Check your network or project billing." }));
+
+      // Announce error to screen readers
+      announceError(errorInfo.message);
+      return;
+    }
+
+    // Announce loading state
+    announceLoading('Transforming screenshot to dark mode');
+
+    // Set processing state
+    setState(prev => ({
+      ...prev,
+      original: null,
+      transformed: null,
+      isProcessing: true,
+      error: null,
+      errorCode: undefined,
+    }));
+
+    try {
+      // Compress image before sending to backend
+      const { base64, compressed } = await compressImage(file);
+
+      // Update state with compressed original image
+      setState(prev => ({
+        ...prev,
+        original: base64,
+      }));
+
+      // Send compressed image to backend for transformation
+      const result = await transformScreenshotToDark(compressed, file.type);
+
+      setState(prev => ({
+        ...prev,
+        transformed: result,
+        isProcessing: false,
+      }));
+
+      // Announce success to screen readers
+      announceSuccess('Transformation complete. Your dark mode screenshot is ready.');
+    } catch (error: unknown) {
+      // Extract error code from Error object
+      let errorCode: ErrorCode = 'TRANSFORMATION_FAILED';
+
+      if (error instanceof Error) {
+        // Map error messages to error codes
+        if (error.message === 'API_KEY_EXPIRED') {
+          errorCode = 'API_KEY_EXPIRED';
+        } else if (error.message === 'QUOTA_EXCEEDED') {
+          errorCode = 'QUOTA_EXCEEDED';
+        } else if (error.message === 'FILE_TOO_LARGE') {
+          errorCode = 'FILE_TOO_LARGE';
+        } else if (error.message === 'INVALID_FILE_TYPE') {
+          errorCode = 'INVALID_FILE_TYPE';
+        } else if (error.message === 'NETWORK_ERROR') {
+          errorCode = 'NETWORK_ERROR';
+        } else if (error.message.includes('compression') || error.message.includes('Invalid image')) {
+          errorCode = 'INVALID_INPUT';
         }
       }
-    };
-    reader.readAsDataURL(file);
+
+      // Get user-friendly error message
+      const errorInfo = getErrorMessage(errorCode);
+
+      setState(prev => ({
+        ...prev,
+        isProcessing: false,
+        error: errorInfo.message,
+        errorCode,
+      }));
+
+      // Announce error to screen readers
+      announceError(errorInfo.message);
+    }
   };
 
-  // Fixed missing handleInput function to process file input changes
   const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files?.[0]) {
       handleFile(e.target.files[0]);
@@ -111,32 +227,14 @@ const Dashboard: React.FC = () => {
   }, []);
 
   const reset = () => {
-    setState({ original: null, transformed: null, isProcessing: false, error: null });
+    setState({
+      original: null,
+      transformed: null,
+      isProcessing: false,
+      error: null,
+      errorCode: undefined,
+    });
   };
-
-  if (hasKey === false) {
-    return (
-      <div className="min-h-screen pt-48 flex flex-col items-center justify-center px-6 text-center animate-fade-in-up">
-        <div className="clay-card p-12 max-w-lg bg-white">
-          <div className="w-16 h-16 bg-[#6A4FBF]/10 rounded-2xl flex items-center justify-center text-[#6A4FBF] mx-auto mb-8">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a3 3 0 01-3 3m-3-3a3 3 0 00-3 3m2.25 9a2.25 2.25 0 002.25-2.25V15M3 15V6a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 6v9" />
-            </svg>
-          </div>
-          <h2 className="text-3xl font-black text-[#4A4A4A] mb-4">Enterprise Access Required</h2>
-          <p className="text-gray-500 mb-8 font-medium">
-            Sola Engine v2 requires a paid Google Cloud Project for high-fidelity transformations. Please select your API key to continue.
-          </p>
-          <button onClick={handleKeySetup} className="clay-button px-10 py-4 bg-[#6A4FBF] text-white w-full">
-            Connect API Key
-          </button>
-          <p className="mt-6 text-[10px] text-gray-400 font-bold uppercase tracking-widest">
-            Requires billing enabled. See <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline text-[#6A4FBF]">billing documentation</a>.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen pt-48 pb-32 px-6 max-w-[1200px] mx-auto animate-fade-in-up">
@@ -146,7 +244,7 @@ const Dashboard: React.FC = () => {
       </div>
 
       {!state.original ? (
-        <div 
+        <div
           onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
           onDragLeave={() => setDragActive(false)}
           onDrop={onDrop}
@@ -159,10 +257,10 @@ const Dashboard: React.FC = () => {
           </div>
           <p className="text-2xl font-black text-[#4A4A4A] mb-4">Drop Light UI Screenshot</p>
           <p className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-10">PNG or JPG • Max 10MB</p>
-          
-          <label className="clay-button px-12 py-5 bg-white text-[#4A4A4A] cursor-pointer shadow-lg hover:shadow-xl">
+
+          <label className="clay-button px-12 py-5 bg-white text-[#4A4A4A] cursor-pointer shadow-lg hover:shadow-xl" aria-label="Upload screenshot file">
             Browse Files
-            <input type="file" className="hidden" onChange={handleInput} accept="image/*" />
+            <input type="file" className="hidden" onChange={handleInput} accept="image/*" aria-label="Choose screenshot file to transform" />
           </label>
         </div>
       ) : (
@@ -170,10 +268,10 @@ const Dashboard: React.FC = () => {
           <div className="flex flex-col gap-6">
             <div className="flex justify-between items-center">
               <span className="text-xs font-black uppercase tracking-widest text-[#4A4A4A]/40">Input Signal</span>
-              <button onClick={reset} className="text-[10px] font-black uppercase tracking-widest text-[#6A4FBF] hover:underline">Replace</button>
+              <button onClick={reset} className="text-[10px] font-black uppercase tracking-widest text-[#6A4FBF] hover:underline" aria-label="Replace screenshot with a new file">Replace</button>
             </div>
             <div className="clay-card p-6 bg-white shadow-2xl overflow-hidden min-h-[400px] flex items-center justify-center border-white">
-              <img src={state.original} className="w-full h-auto rounded-2xl shadow-sm" alt="Original" />
+              <img src={state.original} className="w-full h-auto rounded-2xl shadow-sm" alt="Original light mode screenshot uploaded for transformation" />
             </div>
           </div>
 
@@ -192,18 +290,36 @@ const Dashboard: React.FC = () => {
                   </div>
                 </div>
               ) : state.error ? (
-                <div className="text-center p-8">
-                  <p className="text-red-400 font-bold mb-6 text-sm">{state.error}</p>
-                  <button onClick={state.error.includes('API') ? handleKeySetup : reset} className="clay-button px-8 py-3 bg-white/10 text-white text-[10px]">
-                    {state.error.includes('API') ? 'Reconnect' : 'Try Again'}
-                  </button>
+                <div className="text-center p-8" role="alert" aria-live="assertive">
+                  <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center text-red-400 mx-auto mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                    </svg>
+                  </div>
+                  {state.errorCode && (
+                    <>
+                      <h3 className="text-white font-black mb-2 text-lg tracking-tight">
+                        {getErrorMessage(state.errorCode).title}
+                      </h3>
+                      <p className="text-red-400 font-medium mb-6 text-sm leading-relaxed">
+                        {getErrorMessage(state.errorCode).message}
+                      </p>
+                      <button
+                        onClick={reset}
+                        className="clay-button px-8 py-3 bg-white/10 text-white text-[10px] hover:bg-white/20 transition-colors"
+                        aria-label={isRecoverableError(state.errorCode) ? 'Try transformation again' : 'Choose a different file'}
+                      >
+                        {isRecoverableError(state.errorCode) ? 'Try Again' : 'Choose New File'}
+                      </button>
+                    </>
+                  )}
                 </div>
               ) : state.transformed ? (
                 <div className="w-full flex flex-col gap-8">
-                  <img src={state.transformed} className="w-full h-auto rounded-2xl shadow-lg shadow-black/50" alt="Transformed" />
+                  <img src={state.transformed} className="w-full h-auto rounded-2xl shadow-lg shadow-black/50" alt="Transformed dark mode screenshot ready for download" />
                   <div className="grid grid-cols-2 gap-4">
-                    <button onClick={reset} className="py-4 bg-white/5 border border-white/10 rounded-2xl text-white/50 font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-colors">Dismiss</button>
-                    <a href={state.transformed} download="sola-dark-pro.png" className="py-4 bg-[#6A4FBF] rounded-2xl text-white font-black text-xs uppercase tracking-widest text-center shadow-lg hover:shadow-xl transition-all">Download PNG</a>
+                    <button onClick={reset} className="py-4 bg-white/5 border border-white/10 rounded-2xl text-white/50 font-black text-xs uppercase tracking-widest hover:bg-white/10 transition-colors" aria-label="Dismiss result and start new transformation">Dismiss</button>
+                    <a href={state.transformed} download="sola-dark-pro.png" className="py-4 bg-[#6A4FBF] rounded-2xl text-white font-black text-xs uppercase tracking-widest text-center shadow-lg hover:shadow-xl transition-all" aria-label="Download transformed dark mode screenshot as PNG file">Download PNG</a>
                   </div>
                 </div>
               ) : null}
@@ -216,9 +332,32 @@ const Dashboard: React.FC = () => {
         <div className="mt-32 p-16 bg-white/40 rounded-[60px] shadow-[inset_10px_10px_30px_#d1c4bb,inset_-10px_-10px_30px_#ffffff] border border-white/50 text-center animate-fade-in-up">
           <h3 className="text-3xl font-black text-[#4A4A4A] mb-6 tracking-tighter">Gemini 3 Pro Intelligence</h3>
           <p className="text-lg text-[#4A4A4A]/60 max-w-2xl mx-auto font-medium leading-relaxed">
-            Unlike standard inversion, Sola Engine v2 leverages multimodal reasoning to understand UI semantics. 
+            Unlike standard inversion, Sola Engine v2 leverages multimodal reasoning to understand UI semantics.
             It preserves your brand's emotional resonance while ensuring a high-performance dark theme.
           </p>
+        </div>
+      )}
+
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none"
+          role="alert"
+          aria-live="polite"
+        >
+          <div className="clay-card p-8 bg-white shadow-2xl animate-scale-in pointer-events-auto">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center animate-bounce">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="white" className="w-6 h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <h4 className="text-lg font-black text-[#4A4A4A] tracking-tight">Transformation Complete!</h4>
+                <p className="text-sm text-[#4A4A4A]/60 font-medium">Your dark mode screenshot is ready.</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

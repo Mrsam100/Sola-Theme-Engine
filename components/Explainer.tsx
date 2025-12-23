@@ -7,9 +7,9 @@
 import React from 'react';
 import { EXPLAINER_SECTIONS } from '../constants';
 
-const Explainer: React.FC = () => {
+const Explainer: React.FC = React.memo(() => {
   return (
-    <section className="py-32 px-6 bg-[#F8E9DD] relative z-10">
+    <section id="explainer" className="py-32 px-6 bg-[#F8E9DD] relative z-10">
       <div className="max-w-[1200px] mx-auto">
         <div className="text-center mb-24">
           <span className="px-4 py-2 bg-white/60 rounded-full text-xs font-black uppercase tracking-widest text-[#6A4FBF] border border-white/60 shadow-sm">Detailed Methodology</span>
@@ -60,7 +60,9 @@ const Explainer: React.FC = () => {
       </div>
     </section>
   );
-};
+});
+
+Explainer.displayName = 'Explainer';
 
 const FeaturePoint: React.FC<{ num: string, title: string, desc: string }> = ({ num, title, desc }) => (
   <div className="flex items-start gap-6">

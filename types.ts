@@ -4,15 +4,31 @@
  * SPDX-License-Identifier: Apache-2.0
 */
 
-export type ViewState = 
+export type ViewState =
   | { type: 'home' }
-  | { type: 'dashboard' };
+  | { type: 'dashboard' }
+  | { type: 'privacy' }
+  | { type: 'terms' }
+  | { type: 'security' };
+
+// Error codes for better error handling
+export type ErrorCode =
+  | 'API_KEY_EXPIRED'
+  | 'QUOTA_EXCEEDED'
+  | 'FILE_TOO_LARGE'
+  | 'INVALID_FILE_TYPE'
+  | 'NETWORK_ERROR'
+  | 'TRANSFORMATION_FAILED'
+  | 'CHAT_FAILED'
+  | 'INVALID_INPUT'
+  | 'GENERIC';
 
 export interface ConversionState {
   original: string | null;
   transformed: string | null;
   isProcessing: boolean;
   error: string | null;
+  errorCode?: ErrorCode;
 }
 
 // Added ChatMessage interface for Assistant component
