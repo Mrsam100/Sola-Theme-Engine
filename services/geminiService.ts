@@ -6,28 +6,25 @@
 
 import { GoogleGenAI } from "@google/genai";
 
-// Fix for sendMessageToGemini missing export
 export const sendMessageToGemini = async (history: { role: string; text: string }[], message: string): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Convert history to Content format
     const contents = history.map(item => ({
       role: item.role === 'model' ? 'model' : 'user',
       parts: [{ text: item.text }]
     }));
     
-    // Add current user message
     contents.push({
       role: 'user',
       parts: [{ text: message }]
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
+      model: 'gemini-3-pro-preview',
       contents,
       config: {
-        systemInstruction: "You are an AI Literacy Guide for Schroeder Technologies. You help explain digital safety, AI bias, and data privacy to students, parents, and teachers in a friendly and clear manner."
+        systemInstruction: "You are an AI Design Consultant for Schroeder Technologies. You help explain UI/UX principles, dark mode accessibility (WCAG), and modern theme architectures."
       }
     });
 
@@ -40,14 +37,11 @@ export const sendMessageToGemini = async (history: { role: string; text: string 
 
 export const transformScreenshotToDark = async (base64Image: string, mimeType: string): Promise<string> => {
   try {
-    if (!process.env.API_KEY) {
-      throw new Error("API Key missing");
-    }
-
+    // Create fresh instance right before call as per guidelines
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
+      model: 'gemini-3-pro-image-preview',
       contents: {
         parts: [
           {
@@ -57,24 +51,26 @@ export const transformScreenshotToDark = async (base64Image: string, mimeType: s
             },
           },
           {
-            text: `Convert this light-mode UI screenshot to a professional, intentional dark-mode version. 
+            text: `Re-engineer this light-mode UI screenshot into a professional, high-fidelity dark-mode variant.
             
-            RULES FOR TRANSFORMATION:
-            1. BACKGROUNDS: Use a dark gray palette (Zinc/Slate #09090B to #1F1F1F). DO NOT use pure black #000000.
-            2. TEXT: Map black/dark text to accessible soft whites and light grays (#E5E5E5 to #FAFAFA).
-            3. ACCENTS: Recalibrate button/brand colors. Keep them recognizable but adjust their luminosity and saturation to prevent 'vibrating' contrast against dark backgrounds.
-            4. SHADOWS: Remove large dark drop shadows. Replace with subtle elevation tints (making higher layers slightly lighter gray) or soft rim lighting.
-            5. HIERARCHY: Maintain the existing visual hierarchy. Headlines should be the brightest text, body text slightly dimmer.
-            6. ACCESSIBILITY: Ensure a professional aesthetic that meets WCAG contrast standards.
+            DESIGN SYSTEM REQUIREMENTS:
+            1. BASE SURFACE: Use a rich, deep grey palette (Zinc-950 #09090B). Use elevation-based lighting where components on top are slightly lighter grey.
+            2. TYPOGRAPHY: Ensure high legibility. Map dark text to White-900 (#F8FAFC) for headings and Slate-400 (#94A3B8) for body text.
+            3. COLOR VIBRANCY: Recalibrate brand colors (blues, purples, oranges) to look "vibrant" on dark backgrounds by adjusting their saturation and brightness to avoid 'visual buzzing'.
+            4. SHADOWS & DEPTH: Eliminate harsh drop shadows. Use 1px subtle borders (#FFFFFF10) and rim lighting for depth.
+            5. CONTEXTUAL SEARCH: Reference modern design trends for dashboards and SaaS applications to ensure the result looks cutting-edge.
+            6. ACCESSIBILITY: Strictly adhere to WCAG AA standards (4.5:1 ratio).
             
-            Return ONLY the generated image. DO NOT return inverted junk—create a properly designed dark theme.`,
+            Return only the processed image. Result must look like an intentional dark theme design, not a simple inversion.`,
           },
         ],
       },
       config: {
         imageConfig: {
-          aspectRatio: "1:1" // Defaulting to 1:1 for UI captures, but Gemini usually respects source.
-        }
+          aspectRatio: "1:1",
+          imageSize: "1K"
+        },
+        tools: [{ googleSearch: {} }] // Utilize search for trend-accurate transformations
       }
     });
 
@@ -84,9 +80,13 @@ export const transformScreenshotToDark = async (base64Image: string, mimeType: s
       }
     }
 
-    throw new Error("No image data returned from AI");
+    throw new Error("Sola engine returned no visual data.");
   } catch (error) {
     console.error("Theme Transformation Error:", error);
+    // Handle the specific error if API key needs re-selection
+    if (error instanceof Error && error.message.includes("Requested entity was not found")) {
+      throw new Error("API_KEY_EXPIRED");
+    }
     throw error;
   }
 };
