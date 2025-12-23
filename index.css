@@ -1,0 +1,70 @@
+
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&display=swap');
+      
+:root {
+  --color-primary: #FFB673;
+  --color-secondary: #6A4FBF;
+  --color-neutral: #F8E9DD;
+  --color-text: #4A4A4A;
+}
+
+html {
+  scroll-behavior: smooth;
+  background-color: var(--color-neutral);
+}
+
+body {
+  font-family: 'Outfit', sans-serif;
+  color: var(--color-text);
+  background-color: var(--color-neutral);
+}
+
+.clay-card {
+  background: #F8E9DD;
+  border-radius: 40px;
+  box-shadow: 20px 20px 40px #d1c4bb, -20px -20px 40px #ffffff;
+  border: 1px solid rgba(255,255,255, 0.4);
+}
+
+.clay-button {
+  background: #F8E9DD;
+  border-radius: 100px;
+  box-shadow: 10px 10px 20px #d1c4bb, -10px -10px 20px #ffffff;
+  transition: all 0.2s ease;
+  border: 1px solid rgba(255,255,255,0.5);
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.clay-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 12px 12px 24px #d1c4bb, -12px -12px 24px #ffffff;
+}
+
+.clay-button:active {
+  box-shadow: inset 4px 4px 8px #d1c4bb, inset -4px -4px 8px #ffffff;
+  transform: translateY(1px);
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.6s ease-out forwards;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-15px); }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 6s ease-in-out infinite 1s;
+}

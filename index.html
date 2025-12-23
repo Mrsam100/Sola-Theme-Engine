@@ -1,0 +1,133 @@
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sola | Professional UI Theme Converter</title>
+    <meta name="description" content="Convert light mode UI screenshots into professional dark mode themes automatically." />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+      
+      :root {
+        --color-primary: #FFB673;   
+        --color-secondary: #6A4FBF; 
+        --color-accent-1: #2AB9A9;  
+        --color-accent-2: #FFD447;  
+        --color-neutral: #F8E9DD;   
+        --color-text: #4A4A4A;
+      }
+
+      html {
+        scroll-behavior: smooth;
+        background-color: var(--color-neutral);
+      }
+
+      body {
+        font-family: 'Outfit', sans-serif;
+        color: var(--color-text);
+        background-color: var(--color-neutral);
+        overflow-x: hidden;
+      }
+
+      .clay-card {
+        background: #F8E9DD;
+        border-radius: 40px;
+        box-shadow:  20px 20px 40px #d3c6bc, 
+                     -20px -20px 40px #ffffff;
+        border: 1px solid rgba(255,255,255, 0.4);
+        transition: transform 0.3s ease, box-shadow 0.3s ease;
+      }
+
+      .clay-bevel {
+        position: relative;
+        border: 1px solid rgba(255,255,255,0.6);
+      }
+      .clay-bevel::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        box-shadow: inset 2px 2px 4px rgba(255,255,255,0.9), 
+                    inset -2px -2px 4px rgba(166,145,129,0.15);
+        pointer-events: none;
+      }
+
+      .clay-img-inset {
+        border-radius: 24px;
+        overflow: hidden;
+        box-shadow: inset 6px 6px 12px #d3c6bc, 
+                    inset -6px -6px 12px #ffffff;
+        border: 2px solid rgba(255,255,255,0.3);
+        position: relative;
+      }
+
+      .clay-button {
+        background: #F8E9DD;
+        color: var(--color-text); 
+        border-radius: 50px;
+        box-shadow:  10px 10px 20px #d3c6bc, 
+                     -10px -10px 20px #ffffff;
+        transition: all 0.2s ease;
+        border: 1px solid rgba(255,255,255,0.5);
+        position: relative;
+        overflow: hidden;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+      }
+      .clay-button:hover {
+        transform: translateY(-2px);
+        box-shadow:  12px 12px 24px #d3c6bc, 
+                     -12px -12px 24px #ffffff;
+        color: var(--color-secondary);
+      }
+      .clay-button:active {
+        transform: translateY(1px);
+        box-shadow: inset 4px 4px 8px #d3c6bc, 
+                    inset -4px -4px 8px #ffffff;
+      }
+
+      .clay-text-convex {
+        background: #F8E9DD;
+        border-radius: 12px;
+        box-shadow:  4px 4px 8px #d3c6bc, 
+                     -4px -4px 8px #ffffff;
+        padding: 4px 12px;
+        display: inline-block;
+        border: 1px solid rgba(255,255,255,0.2);
+      }
+
+      @keyframes float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-20px); }
+      }
+      .animate-float { animation: float 6s ease-in-out infinite; }
+      .animate-float-delayed { animation: float 7s ease-in-out infinite 1s; }
+
+      @keyframes fade-in-up {
+        0% { opacity: 0; transform: translateY(20px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+
+      .no-scrollbar::-webkit-scrollbar { display: none; }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.0",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/",
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/"
+  }
+}
+</script>
+</head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>
